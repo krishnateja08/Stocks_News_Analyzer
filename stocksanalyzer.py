@@ -240,44 +240,21 @@ def analyze_stocks(headlines, market_filter="both"):
 
 
 # ─────────────────────────────────────────────
-# GENERATE HTML REPORT
+# GENERATE HTML REPORT (with interactive tabs)
 # ─────────────────────────────────────────────
 def generate_html(headlines, up_list, down_list, market_filter):
     now = datetime.now().strftime("%d %b %Y, %I:%M %p")
-    market_label = {"both": "🌐 US + Indian Markets", "us": "🇺🇸 US Markets Only", "in": "🇮🇳 Indian Markets Only"}.get(market_filter, "Both")
 
-    def card(s, direction):
-        color = "#00e5a0" if direction == "up" else "#ff4466"
-        bg = "rgba(0,229,160,0.06)" if direction == "up" else "rgba(255,68,102,0.06)"
-        border = "rgba(0,229,160,0.25)" if direction == "up" else "rgba(255,68,102,0.25)"
-        arrow = "↑" if direction == "up" else "↓"
-        arrow_bg = "rgba(0,229,160,0.12)" if direction == "up" else "rgba(255,68,102,0.12)"
-        flag = "🇮🇳" if s["market"] in ("NSE","BSE") else "🇺🇸"
-        conf = s["confidence"]
-        triggered = "".join(f'<div class="trigger">📰 {escape(t)}</div>' for t in s["triggered_by"])
+    # Embed ALL stocks as JSON — JS will filter live by market tab
+    all_stocks = []
+    for s in up_list:
+        all_stocks.append({**s, "direction": "up", "triggered_by": s.get("triggered_by", [])})
+    for s in down_list:
+        all_stocks.append({**s, "direction": "down", "triggered_by": s.get("triggered_by", [])})
 
-        return f"""
-        <div class="card" style="border-color:{border};background:linear-gradient(135deg,#0e1318,{bg})">
-          <div class="card-top">
-            <div>
-              <div class="ticker" style="color:{color}">{escape(s['ticker'])}</div>
-              <div class="cname">{escape(s['name'])}</div>
-              <div class="mkt">{flag} {escape(s['market'])}</div>
-            </div>
-            <div class="arrow" style="background:{arrow_bg};color:{color}">{arrow}</div>
-          </div>
-          <div class="reason">{escape(s['reason'])}</div>
-          {triggered}
-          <div class="conf-row">
-            <span class="conf-label">CONVICTION</span>
-            <div class="conf-bar"><div class="conf-fill" style="width:{conf}%;background:{color}"></div></div>
-            <span class="conf-pct" style="color:{color}">{conf}%</span>
-          </div>
-        </div>"""
+    stocks_json = json.dumps(all_stocks, ensure_ascii=False)
 
-    up_cards = "".join(card(s, "up") for s in up_list) or '<p style="color:#5a7080;padding:20px">No bullish signals found in today\'s news.</p>'
-    down_cards = "".join(card(s, "down") for s in down_list) or '<p style="color:#5a7080;padding:20px">No bearish signals found in today\'s news.</p>'
-
+    # Headlines HTML
     hl_items = "".join(f"""
         <div class="hl-item">
           <span class="hl-num">{str(i+1).zfill(2)}</span>
@@ -287,12 +264,16 @@ def generate_html(headlines, up_list, down_list, market_filter):
           </div>
         </div>""" for i, h in enumerate(headlines[:20]))
 
+    total_up   = len(up_list)
+    total_down = len(down_list)
+    total_hl   = len(headlines)
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>StockPulse Report — {now}</title>
+<title>StockPulse — {now}</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
 <style>
 :root{{--bg:#080c10;--s:#0e1318;--s2:#141b22;--b:#1e2a34;--g:#00e5a0;--r:#ff4466;--bl:#3b8bff;--y:#f5c842;--t:#e8f0f7;--m:#5a7080;}}
@@ -306,31 +287,47 @@ header{{padding:28px 0 20px;border-bottom:1px solid var(--b);display:flex;align-
 .logo-text{{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;}}
 .logo-sub{{font-size:11px;color:var(--m);font-family:'DM Mono',monospace;letter-spacing:1px;}}
 .badge{{display:flex;align-items:center;gap:6px;background:rgba(0,229,160,0.1);border:1px solid rgba(0,229,160,0.3);border-radius:20px;padding:5px 12px;font-size:12px;color:var(--g);font-family:'DM Mono',monospace;}}
+.dot{{width:7px;height:7px;border-radius:50%;background:var(--g);animation:pulse 1.5s infinite;}}
+@keyframes pulse{{0%,100%{{opacity:1;transform:scale(1)}}50%{{opacity:.4;transform:scale(0.8)}}}}
 .ts{{font-size:12px;color:var(--m);font-family:'DM Mono',monospace;}}
-.meta{{display:flex;gap:20px;padding:16px 0;border-bottom:1px solid var(--b);margin-bottom:28px;flex-wrap:wrap;}}
-.meta-chip{{background:var(--s);border:1px solid var(--b);border-radius:8px;padding:8px 16px;font-size:13px;}}
-.meta-chip span{{color:var(--bl);font-weight:600;}}
-.section-hdr{{display:flex;align-items:center;gap:12px;margin-bottom:20px;margin-top:32px;}}
+
+/* MARKET FILTER TABS */
+.tabs-wrap{{display:flex;align-items:center;gap:10px;padding:20px 0 16px;flex-wrap:wrap;}}
+.tabs-label{{font-size:11px;color:var(--m);font-family:'DM Mono',monospace;letter-spacing:1px;margin-right:4px;}}
+.tab{{padding:8px 20px;border-radius:8px;border:1px solid var(--b);background:var(--s);color:var(--m);
+      font-size:13px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:600;transition:all .2s;}}
+.tab:hover{{border-color:var(--bl);color:var(--t);}}
+.tab.active{{background:var(--bl);border-color:var(--bl);color:#fff;}}
+
+/* STATS ROW */
+.stats{{display:flex;gap:14px;margin-bottom:24px;flex-wrap:wrap;}}
+.stat{{flex:1;min-width:130px;background:var(--s);border:1px solid var(--b);border-radius:12px;padding:14px 16px;}}
+.stat-val{{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;}}
+.stat-lbl{{font-size:11px;color:var(--m);font-family:'DM Mono',monospace;margin-top:3px;}}
+
+.section-hdr{{display:flex;align-items:center;gap:12px;margin-bottom:16px;margin-top:28px;}}
 .section-lbl{{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;}}
 .section-cnt{{padding:2px 10px;border-radius:20px;font-size:12px;font-family:'DM Mono',monospace;}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:32px;}}
-.card{{border-radius:14px;padding:18px 20px;border:1px solid;transition:transform .2s;}}
-.card:hover{{transform:translateY(-3px);}}
+.card{{border-radius:14px;padding:18px 20px;border:1px solid;transition:transform .2s,box-shadow .2s;}}
+.card:hover{{transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,0.3);}}
 .card-top{{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;}}
 .ticker{{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;}}
 .cname{{font-size:13px;color:var(--m);margin-bottom:4px;}}
-.mkt{{font-size:10px;font-family:'DM Mono',monospace;color:var(--m);background:var(--s2);border:1px solid var(--b);border-radius:20px;padding:2px 8px;display:inline-block;margin-bottom:10px;}}
+.mkt-badge{{font-size:10px;font-family:'DM Mono',monospace;color:var(--m);background:var(--s2);
+            border:1px solid var(--b);border-radius:20px;padding:2px 8px;display:inline-block;margin-bottom:10px;}}
 .arrow{{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;}}
 .reason{{font-size:13px;line-height:1.6;color:#b0bec8;border-top:1px solid var(--b);padding-top:12px;margin-bottom:8px;}}
-.trigger{{font-size:11px;color:var(--m);font-family:'DM Mono',monospace;margin-top:4px;line-height:1.4;}}
+.trigger{{font-size:11px;color:var(--m);font-family:'DM Mono',monospace;margin-top:4px;line-height:1.5;}}
 .conf-row{{display:flex;align-items:center;gap:8px;margin-top:12px;}}
 .conf-label{{font-size:10px;color:var(--m);font-family:'DM Mono',monospace;}}
 .conf-bar{{flex:1;height:4px;background:var(--b);border-radius:2px;overflow:hidden;}}
-.conf-fill{{height:100%;border-radius:2px;}}
+.conf-fill{{height:100%;border-radius:2px;transition:width .6s;}}
 .conf-pct{{font-size:10px;font-family:'DM Mono',monospace;}}
-.hl-box{{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:16px 20px;margin-bottom:28px;}}
+.empty{{color:var(--m);padding:28px 20px;font-size:14px;font-family:'DM Mono',monospace;}}
+.hl-box{{background:var(--s);border:1px solid var(--b);border-radius:12px;padding:16px 20px;margin-bottom:24px;}}
 .hl-box h3{{font-size:11px;color:var(--m);font-family:'DM Mono',monospace;letter-spacing:1px;margin-bottom:12px;}}
-.hl-list{{max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;}}
+.hl-list{{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;}}
 .hl-item{{display:flex;gap:10px;background:var(--s2);border-radius:8px;padding:8px 12px;}}
 .hl-num{{color:var(--m);font-family:'DM Mono',monospace;font-size:11px;min-width:22px;margin-top:2px;}}
 .hl-title{{font-size:13px;color:var(--t);text-decoration:none;line-height:1.5;}}
@@ -344,6 +341,7 @@ footer span{{color:var(--bl);}}
 </head>
 <body>
 <div class="wrap">
+
   <header>
     <div class="logo">
       <div class="logo-icon">📡</div>
@@ -353,41 +351,149 @@ footer span{{color:var(--bl);}}
       </div>
     </div>
     <div style="display:flex;gap:12px;align-items:center;">
-      <div class="badge">📰 LIVE NEWS</div>
+      <div class="badge"><div class="dot"></div>LIVE NEWS</div>
       <div class="ts">{now}</div>
     </div>
   </header>
 
-  <div class="meta">
-    <div class="meta-chip">Market: <span>{market_label}</span></div>
-    <div class="meta-chip">Headlines Analyzed: <span>{len(headlines)}</span></div>
-    <div class="meta-chip">📈 Stocks Rising: <span style="color:#00e5a0">{len(up_list)}</span></div>
-    <div class="meta-chip">📉 Stocks Falling: <span style="color:#ff4466">{len(down_list)}</span></div>
+  <!-- INTERACTIVE MARKET FILTER TABS -->
+  <div class="tabs-wrap">
+    <span class="tabs-label">FILTER BY MARKET</span>
+    <button class="tab active" onclick="setFilter('both', this)">🌐 Both Markets</button>
+    <button class="tab" onclick="setFilter('us', this)">🇺🇸 US Stocks</button>
+    <button class="tab" onclick="setFilter('india', this)">🇮🇳 Indian Stocks</button>
   </div>
 
+  <!-- DYNAMIC STATS -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-val" id="stat-hl" style="color:var(--bl)">{total_hl}</div>
+      <div class="stat-lbl">HEADLINES ANALYZED</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="stat-up" style="color:var(--g)">{total_up}</div>
+      <div class="stat-lbl">📈 STOCKS RISING</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="stat-down" style="color:var(--r)">{total_down}</div>
+      <div class="stat-lbl">📉 STOCKS FALLING</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="stat-mkt" style="color:var(--y)">🌐</div>
+      <div class="stat-lbl">MARKET VIEW</div>
+    </div>
+  </div>
+
+  <!-- HEADLINES -->
   <div class="hl-box">
-    <h3>FETCHED HEADLINES</h3>
+    <h3>FETCHED HEADLINES — {total_hl} ARTICLES</h3>
     <div class="hl-list">{hl_items}</div>
   </div>
 
+  <!-- RISING STOCKS -->
   <div class="section-hdr">
-    <div class="section-lbl" style="color:#00e5a0">📈 Likely to Rise</div>
-    <div class="section-cnt" style="background:rgba(0,229,160,0.12);color:#00e5a0">{len(up_list)}</div>
+    <div class="section-lbl" style="color:var(--g)">📈 Likely to Rise</div>
+    <div class="section-cnt" id="cnt-up" style="background:rgba(0,229,160,0.12);color:var(--g)">{total_up}</div>
   </div>
-  <div class="grid">{up_cards}</div>
+  <div class="grid" id="grid-up"></div>
 
+  <!-- FALLING STOCKS -->
   <div class="section-hdr">
-    <div class="section-lbl" style="color:#ff4466">📉 Likely to Fall</div>
-    <div class="section-cnt" style="background:rgba(255,68,102,0.12);color:#ff4466">{len(down_list)}</div>
+    <div class="section-lbl" style="color:var(--r)">📉 Likely to Fall</div>
+    <div class="section-cnt" id="cnt-down" style="background:rgba(255,68,102,0.12);color:var(--r)">{total_down}</div>
   </div>
-  <div class="grid">{down_cards}</div>
+  <div class="grid" id="grid-down"></div>
 
   <footer>
     <p>⚠️ For informational purposes only · Not financial advice · Consult a registered advisor</p>
-    <p style="margin-top:6px">Powered by <span>Yahoo Finance RSS</span> · <span>ET Markets</span> · <span>Moneycontrol</span> · <span>Reuters</span> · Rule-based Analysis</p>
+    <p style="margin-top:6px">Sources: <span>Yahoo Finance</span> · <span>ET Markets</span> · <span>Moneycontrol</span> · <span>Reuters</span> · <span>LiveMint</span></p>
     <p style="margin-top:6px">Generated: <span>{now}</span></p>
   </footer>
 </div>
+
+<script>
+// All stock data embedded by Python at build time
+const ALL_STOCKS = {stocks_json};
+
+let currentFilter = 'both';
+
+function isIndian(s) {{
+  return s.market === 'NSE' || s.market === 'BSE';
+}}
+function isUS(s) {{
+  return s.market === 'NYSE' || s.market === 'NASDAQ';
+}}
+
+function filterStocks(filter) {{
+  if (filter === 'india') return ALL_STOCKS.filter(s => isIndian(s));
+  if (filter === 'us')    return ALL_STOCKS.filter(s => isUS(s));
+  return ALL_STOCKS;
+}}
+
+function makeCard(s) {{
+  const isUp    = s.direction === 'up';
+  const color   = isUp ? '#00e5a0' : '#ff4466';
+  const bg      = isUp ? 'rgba(0,229,160,0.06)' : 'rgba(255,68,102,0.06)';
+  const border  = isUp ? 'rgba(0,229,160,0.25)' : 'rgba(255,68,102,0.25)';
+  const arrowBg = isUp ? 'rgba(0,229,160,0.12)' : 'rgba(255,68,102,0.12)';
+  const arrow   = isUp ? '↑' : '↓';
+  const flag    = isIndian(s) ? '🇮🇳' : '🇺🇸';
+  const conf    = s.confidence;
+  const triggers = (s.triggered_by || [])
+    .map(t => `<div class="trigger">📰 ${{t.substring(0,90)}}</div>`).join('');
+
+  return `
+  <div class="card" style="border-color:${{border}};background:linear-gradient(135deg,#0e1318,${{bg}})">
+    <div class="card-top">
+      <div>
+        <div class="ticker" style="color:${{color}}">${{s.ticker}}</div>
+        <div class="cname">${{s.name}}</div>
+        <div class="mkt-badge">${{flag}} ${{s.market}}</div>
+      </div>
+      <div class="arrow" style="background:${{arrowBg}};color:${{color}}">${{arrow}}</div>
+    </div>
+    <div class="reason">${{s.reason}}</div>
+    ${{triggers}}
+    <div class="conf-row">
+      <span class="conf-label">CONVICTION</span>
+      <div class="conf-bar"><div class="conf-fill" style="width:${{conf}}%;background:${{color}}"></div></div>
+      <span class="conf-pct" style="color:${{color}}">${{conf}}%</span>
+    </div>
+  </div>`;
+}}
+
+function render(filter) {{
+  const stocks = filterStocks(filter);
+  const upStocks   = stocks.filter(s => s.direction === 'up');
+  const downStocks = stocks.filter(s => s.direction === 'down');
+
+  const upGrid   = document.getElementById('grid-up');
+  const downGrid = document.getElementById('grid-down');
+
+  upGrid.innerHTML   = upStocks.length   ? upStocks.map(makeCard).join('')
+    : '<div class="empty">No bullish signals for this market view.</div>';
+  downGrid.innerHTML = downStocks.length ? downStocks.map(makeCard).join('')
+    : '<div class="empty">No bearish signals for this market view.</div>';
+
+  document.getElementById('cnt-up').textContent   = upStocks.length;
+  document.getElementById('cnt-down').textContent = downStocks.length;
+  document.getElementById('stat-up').textContent  = upStocks.length;
+  document.getElementById('stat-down').textContent= downStocks.length;
+
+  const labels = {{ both:'🌐 Both', us:'🇺🇸 US Only', india:'🇮🇳 India Only' }};
+  document.getElementById('stat-mkt').textContent = labels[filter] || '🌐';
+}}
+
+function setFilter(filter, el) {{
+  currentFilter = filter;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  render(filter);
+}}
+
+// Initial render
+render('both');
+</script>
 </body>
 </html>"""
     return html
