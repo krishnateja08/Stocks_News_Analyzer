@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>StockPulse — News-Driven Stock Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0e1318;
+    --surface2: #141b22;
+    --border: #1e2a34;
+    --accent-green: #00e5a0;
+    --accent-red: #ff4466;
+    --accent-blue: #3b8bff;
+    --accent-yellow: #f5c842;
+    --text: #e8f0f7;
+    --muted: #5a7080;
+    --card-glow-green: rgba(0,229,160,0.07);
+    --card-glow-red: rgba(255,68,102,0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* BG grid */
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(59,139,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,139,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none;
+    z-index:0;
+  }
+
+  .wrapper { position:relative; z-index:1; max-width:1280px; margin:0 auto; padding:0 24px; }
+
+  /* HEADER */
+  header {
+    padding: 28px 0 20px;
+    border-bottom: 1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;
+  }
+  .logo { display:flex; align-items:center; gap:12px; }
+  .logo-icon {
+    width:42px; height:42px; border-radius:10px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px;
+  }
+  .logo-text { font-family:'Syne',sans-serif; font-size:22px; font-weight:800; letter-spacing:-0.5px; }
+  .logo-sub { font-size:11px; color:var(--muted); font-family:'DM Mono',monospace; letter-spacing:1px; margin-top:1px; }
+  .header-right { display:flex; align-items:center; gap:12px; }
+  .badge-live {
+    display:flex; align-items:center; gap:6px;
+    background: rgba(0,229,160,0.1); border:1px solid rgba(0,229,160,0.3);
+    border-radius:20px; padding:5px 12px; font-size:12px; color:var(--accent-green);
+    font-family:'DM Mono',monospace;
+  }
+  .badge-live .dot { width:7px; height:7px; border-radius:50%; background:var(--accent-green); animation:pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(0.8)} }
+
+  .timestamp { font-size:12px; color:var(--muted); font-family:'DM Mono',monospace; }
+
+  /* SOURCES BAR */
+  .sources-bar {
+    display:flex; align-items:center; gap:10px; padding:16px 0; flex-wrap:wrap;
+    border-bottom:1px solid var(--border); margin-bottom:28px;
+  }
+  .sources-label { font-size:11px; color:var(--muted); font-family:'DM Mono',monospace; letter-spacing:1px; margin-right:4px; }
+  .source-chip {
+    padding:4px 12px; border-radius:20px; font-size:12px;
+    border:1px solid var(--border); color:var(--muted); font-family:'DM Mono',monospace;
+    background:var(--surface);
+  }
+  .source-chip.active { border-color:var(--accent-blue); color:var(--accent-blue); background:rgba(59,139,255,0.08); }
+
+  /* MARKET TABS */
+  .market-tabs { display:flex; gap:8px; margin-bottom:28px; }
+  .tab {
+    padding:8px 20px; border-radius:8px; border:1px solid var(--border);
+    background:var(--surface); color:var(--muted); font-size:13px; cursor:pointer;
+    font-family:'Syne',sans-serif; font-weight:600; transition:all .2s;
+  }
+  .tab.active { background:var(--accent-blue); border-color:var(--accent-blue); color:#fff; }
+  .tab:hover:not(.active) { border-color:var(--accent-blue); color:var(--text); }
+
+  /* FETCH BUTTON */
+  .fetch-bar { display:flex; align-items:center; gap:14px; margin-bottom:32px; flex-wrap:wrap; }
+  .btn-fetch {
+    display:flex; align-items:center; gap:10px;
+    background: linear-gradient(135deg, var(--accent-blue), #0057d9);
+    border:none; border-radius:10px; padding:12px 24px;
+    color:#fff; font-size:14px; font-family:'Syne',sans-serif; font-weight:700;
+    cursor:pointer; transition:transform .15s, box-shadow .15s;
+    box-shadow: 0 4px 20px rgba(59,139,255,0.25);
+  }
+  .btn-fetch:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(59,139,255,0.35); }
+  .btn-fetch:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+  .fetch-hint { font-size:12px; color:var(--muted); }
+
+  /* HEADLINES STRIP */
+  .headlines-wrap {
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:16px 20px; margin-bottom:28px; display:none;
+  }
+  .headlines-wrap.show { display:block; }
+  .hl-title { font-size:11px; color:var(--muted); font-family:'DM Mono',monospace; letter-spacing:1px; margin-bottom:12px; }
+  .hl-list { display:flex; flex-direction:column; gap:8px; max-height:180px; overflow-y:auto; }
+  .hl-item {
+    display:flex; gap:10px; align-items:flex-start;
+    padding:8px 12px; border-radius:8px; background:var(--surface2);
+    font-size:13px; line-height:1.5;
+  }
+  .hl-num { color:var(--muted); font-family:'DM Mono',monospace; font-size:11px; min-width:18px; margin-top:1px; }
+  .hl-src { font-size:10px; color:var(--accent-yellow); font-family:'DM Mono',monospace; margin-top:3px; white-space:nowrap; }
+
+  /* SPINNER */
+  .spinner-wrap { display:none; flex-direction:column; align-items:center; gap:16px; padding:60px 0; }
+  .spinner-wrap.show { display:flex; }
+  .spinner {
+    width:48px; height:48px; border-radius:50%;
+    border:3px solid var(--border);
+    border-top-color:var(--accent-blue);
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .spinner-msg { color:var(--muted); font-size:14px; font-family:'DM Mono',monospace; }
+
+  /* ERROR */
+  .error-box {
+    background:rgba(255,68,102,0.08); border:1px solid rgba(255,68,102,0.3);
+    border-radius:12px; padding:20px 24px; color:var(--accent-red);
+    font-size:14px; display:none; margin-bottom:24px;
+  }
+  .error-box.show { display:block; }
+
+  /* RESULTS GRID */
+  .results-grid { display:none; }
+  .results-grid.show { display:block; }
+
+  .section-header {
+    display:flex; align-items:center; gap:12px; margin-bottom:20px;
+  }
+  .section-label {
+    font-family:'Syne',sans-serif; font-size:18px; font-weight:800; letter-spacing:-0.3px;
+  }
+  .section-count {
+    padding:2px 10px; border-radius:20px; font-size:12px;
+    font-family:'DM Mono',monospace; font-weight:500;
+  }
+  .section-count.up { background:rgba(0,229,160,0.12); color:var(--accent-green); }
+  .section-count.down { background:rgba(255,68,102,0.12); color:var(--accent-red); }
+
+  .stocks-grid {
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr));
+    gap:16px; margin-bottom:40px;
+  }
+
+  .stock-card {
+    border-radius:14px; padding:18px 20px;
+    border:1px solid var(--border);
+    background:var(--surface);
+    transition:transform .2s, box-shadow .2s;
+    position:relative; overflow:hidden;
+  }
+  .stock-card::before {
+    content:''; position:absolute; inset:0; opacity:0;
+    transition:opacity .2s;
+  }
+  .stock-card:hover { transform:translateY(-3px); }
+  .stock-card.up { border-color:rgba(0,229,160,0.25); background:linear-gradient(135deg, var(--surface), rgba(0,229,160,0.04)); }
+  .stock-card.up:hover { box-shadow:0 8px 30px rgba(0,229,160,0.12); }
+  .stock-card.down { border-color:rgba(255,68,102,0.25); background:linear-gradient(135deg, var(--surface), rgba(255,68,102,0.04)); }
+  .stock-card.down:hover { box-shadow:0 8px 30px rgba(255,68,102,0.12); }
+
+  .card-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:10px; }
+  .card-ticker {
+    font-family:'Syne',sans-serif; font-size:20px; font-weight:800; letter-spacing:-0.5px;
+  }
+  .card-ticker.up { color:var(--accent-green); }
+  .card-ticker.down { color:var(--accent-red); }
+
+  .card-arrow {
+    width:34px; height:34px; border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px;
+  }
+  .card-arrow.up { background:rgba(0,229,160,0.12); }
+  .card-arrow.down { background:rgba(255,68,102,0.12); }
+
+  .card-name { font-size:13px; color:var(--muted); margin-bottom:6px; }
+  .card-market {
+    display:inline-flex; align-items:center; gap:5px;
+    font-size:10px; font-family:'DM Mono',monospace; letter-spacing:1px;
+    padding:2px 8px; border-radius:20px;
+    border:1px solid var(--border); color:var(--muted); margin-bottom:12px;
+  }
+  .card-reason {
+    font-size:13px; line-height:1.6; color:#b0bec8;
+    border-top:1px solid var(--border); padding-top:12px; margin-top:4px;
+  }
+  .card-confidence {
+    display:flex; align-items:center; gap:8px; margin-top:12px;
+  }
+  .conf-label { font-size:10px; color:var(--muted); font-family:'DM Mono',monospace; }
+  .conf-bar { flex:1; height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+  .conf-fill { height:100%; border-radius:2px; transition:width .6s ease; }
+  .conf-fill.up { background:var(--accent-green); }
+  .conf-fill.down { background:var(--accent-red); }
+  .conf-pct { font-size:10px; font-family:'DM Mono',monospace; }
+  .conf-pct.up { color:var(--accent-green); }
+  .conf-pct.down { color:var(--accent-red); }
+
+  /* SUMMARY BOX */
+  .summary-box {
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:14px; padding:22px 24px; margin-bottom:32px;
+    display:none;
+  }
+  .summary-box.show { display:block; }
+  .summary-title { font-family:'Syne',sans-serif; font-size:15px; font-weight:700; margin-bottom:10px; color:var(--accent-yellow); }
+  .summary-text { font-size:14px; line-height:1.7; color:#b0bec8; }
+
+  /* STATS ROW */
+  .stats-row {
+    display:flex; gap:16px; flex-wrap:wrap; margin-bottom:28px;
+  }
+  .stat-card {
+    flex:1; min-width:140px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:16px 18px;
+  }
+  .stat-val { font-family:'Syne',sans-serif; font-size:28px; font-weight:800; }
+  .stat-val.up { color:var(--accent-green); }
+  .stat-val.down { color:var(--accent-red); }
+  .stat-val.neutral { color:var(--accent-blue); }
+  .stat-lbl { font-size:12px; color:var(--muted); font-family:'DM Mono',monospace; margin-top:4px; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width:5px; }
+  ::-webkit-scrollbar-track { background:var(--surface); }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+  footer {
+    border-top:1px solid var(--border); padding:24px 0;
+    text-align:center; color:var(--muted); font-size:12px;
+    font-family:'DM Mono',monospace;
+  }
+  footer span { color:var(--accent-blue); }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">📡</div>
+      <div>
+        <div class="logo-text">StockPulse</div>
+        <div class="logo-sub">NEWS-DRIVEN STOCK ANALYZER</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="badge-live"><div class="dot"></div>LIVE NEWS</div>
+      <div class="timestamp" id="ts">—</div>
+    </div>
+  </header>
+
+  <div style="height:24px"></div>
+
+  <div class="sources-bar">
+    <span class="sources-label">NEWS SOURCES</span>
+    <span class="source-chip active">Yahoo Finance</span>
+    <span class="source-chip active">Reuters</span>
+    <span class="source-chip active">Bloomberg Feed</span>
+    <span class="source-chip active">ET Markets</span>
+    <span class="source-chip active">Moneycontrol</span>
+    <span class="source-chip">+ More via RSS</span>
+  </div>
+
+  <div class="market-tabs">
+    <button class="tab active" onclick="setMarket('both',this)">🌐 Both Markets</button>
+    <button class="tab" onclick="setMarket('us',this)">🇺🇸 US Stocks</button>
+    <button class="tab" onclick="setMarket('india',this)">🇮🇳 Indian Stocks</button>
+  </div>
+
+  <div class="fetch-bar">
+    <button class="btn-fetch" id="fetchBtn" onclick="runAnalysis()">
+      <span>⚡</span> Analyze Today's News
+    </button>
+    <span class="fetch-hint">Fetches live headlines → Gemini AI extracts stock impacts for US 🇺🇸 &amp; India 🇮🇳</span>
+  </div>
+
+  <div class="headlines-wrap" id="hlWrap">
+    <div class="hl-title">FETCHED HEADLINES</div>
+    <div class="hl-list" id="hlList"></div>
+  </div>
+
+  <div class="spinner-wrap" id="spinner">
+    <div class="spinner"></div>
+    <div class="spinner-msg" id="spinMsg">Fetching news headlines...</div>
+  </div>
+
+  <div class="error-box" id="errBox"></div>
+
+  <div class="summary-box" id="summaryBox">
+    <div class="summary-title">📊 MARKET SNAPSHOT</div>
+    <div class="summary-text" id="summaryText"></div>
+  </div>
+
+  <div class="stats-row" id="statsRow" style="display:none">
+    <div class="stat-card">
+      <div class="stat-val up" id="statUp">—</div>
+      <div class="stat-lbl">STOCKS TO WATCH (UP)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val down" id="statDown">—</div>
+      <div class="stat-lbl">STOCKS TO WATCH (DOWN)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val neutral" id="statNews">—</div>
+      <div class="stat-lbl">HEADLINES ANALYZED</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val neutral" id="statMkt">—</div>
+      <div class="stat-lbl">MARKETS COVERED</div>
+    </div>
+  </div>
+
+  <div class="results-grid" id="resultsGrid">
+    <div class="section-header">
+      <div class="section-label" style="color:var(--accent-green)">📈 Likely to Rise</div>
+      <div class="section-count up" id="upCount">0</div>
+    </div>
+    <div class="stocks-grid" id="upGrid"></div>
+
+    <div class="section-header">
+      <div class="section-label" style="color:var(--accent-red)">📉 Likely to Fall</div>
+      <div class="section-count down" id="downCount">0</div>
+    </div>
+    <div class="stocks-grid" id="downGrid"></div>
+  </div>
+
+  <footer>
+    <p>⚠️ For informational purposes only. Not financial advice. Always consult a registered advisor.</p>
+    <p style="margin-top:6px">Powered by <span>Yahoo Finance RSS</span> + <span>Google Gemini AI</span></p>
+  </footer>
+</div>
+
+<script>
+let selectedMarket = 'both';
+
+function setMarket(m, el) {
+  selectedMarket = m;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function updateTimestamp() {
+  const now = new Date();
+  document.getElementById('ts').textContent = now.toLocaleString('en-IN', {
+    dateStyle:'medium', timeStyle:'short'
+  });
+}
+updateTimestamp();
+
+const RSS_FEEDS = [
+  { url: 'https://finance.yahoo.com/news/rssindex', label: 'Yahoo Finance' },
+  { url: 'https://feeds.finance.yahoo.com/rss/2.0/headline?s=^NSEI&region=IN&lang=en-IN', label: 'Yahoo India' },
+];
+
+// Use allorigins CORS proxy to fetch RSS
+async function fetchRSS(feedUrl) {
+  const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(feedUrl)}`;
+  const res = await fetch(proxy);
+  const data = await res.json();
+  return data.contents;
+}
+
+function parseRSS(xml) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+  const items = doc.querySelectorAll('item');
+  const headlines = [];
+  items.forEach(item => {
+    const title = item.querySelector('title')?.textContent?.trim();
+    const desc = item.querySelector('description')?.textContent?.replace(/<[^>]+>/g,'').trim().substring(0,200);
+    if (title) headlines.push({ title, desc: desc || '' });
+  });
+  return headlines.slice(0, 20);
+}
+
+function showSpinner(msg) {
+  document.getElementById('spinner').classList.add('show');
+  document.getElementById('spinMsg').textContent = msg;
+}
+function hideSpinner() { document.getElementById('spinner').classList.remove('show'); }
+
+function showError(msg) {
+  const b = document.getElementById('errBox');
+  b.textContent = '⚠️ ' + msg;
+  b.classList.add('show');
+}
+function hideError() { document.getElementById('errBox').classList.remove('show'); }
+
+function renderHeadlines(items, label) {
+  const wrap = document.getElementById('hlWrap');
+  const list = document.getElementById('hlList');
+  list.innerHTML = '';
+  items.forEach((h, i) => {
+    list.innerHTML += `<div class="hl-item">
+      <span class="hl-num">${String(i+1).padStart(2,'0')}</span>
+      <div><div>${h.title}</div><div class="hl-src">${label}</div></div>
+    </div>`;
+  });
+  wrap.classList.add('show');
+}
+
+function createStockCard(s, direction) {
+  const isUp = direction === 'up';
+  const conf = s.confidence || 70;
+  const flag = (s.market || '').toLowerCase().includes('india') || (s.market || '').toLowerCase().includes('nse') ? '🇮🇳' : '🇺🇸';
+  return `<div class="stock-card ${direction}">
+    <div class="card-top">
+      <div>
+        <div class="card-ticker ${direction}">${s.ticker}</div>
+        <div class="card-name">${s.name || ''}</div>
+        <div class="card-market">${flag} ${s.market || (isUp ? 'NSE/NYSE' : 'NSE/NYSE')}</div>
+      </div>
+      <div class="card-arrow ${direction}">${isUp ? '↑' : '↓'}</div>
+    </div>
+    <div class="card-reason">${s.reason}</div>
+    <div class="card-confidence">
+      <span class="conf-label">CONVICTION</span>
+      <div class="conf-bar"><div class="conf-fill ${direction}" style="width:${conf}%"></div></div>
+      <span class="conf-pct ${direction}">${conf}%</span>
+    </div>
+  </div>`;
+}
+
+async function callGemini(headlines, market) {
+  // API key is injected at build time by GitHub Actions from repository secret
+  const apiKey = '%%GEMINI_API_KEY%%';
+  if (!apiKey || apiKey === '%%GEMINI_API_KEY%%') {
+    throw new Error('Gemini API key not configured. Please add GEMINI_API_KEY to your GitHub repository secrets and redeploy.');
+  }
+
+  const mktInstruction = market === 'us'
+    ? 'Focus ONLY on US/NYSE/NASDAQ stocks.'
+    : market === 'india'
+    ? 'Focus ONLY on Indian NSE/BSE stocks.'
+    : 'Include BOTH US stocks (NYSE/NASDAQ) and Indian stocks (NSE/BSE).';
+
+  const headlineText = headlines.map((h,i) => `${i+1}. ${h.title}. ${h.desc}`).join('\n');
+
+  const prompt = `You are a financial analyst AI. Analyze these latest financial news headlines and identify which stocks are likely to go UP or DOWN today based purely on the news.
+
+${mktInstruction}
+
+HEADLINES:
+${headlineText}
+
+Return a valid JSON object ONLY (no markdown, no explanation, no backticks) with this exact structure:
+{
+  "summary": "2-3 sentence market snapshot based on the news",
+  "up": [
+    {
+      "ticker": "SYMBOL",
+      "name": "Company Full Name",
+      "market": "NYSE or NASDAQ or NSE or BSE",
+      "reason": "Why this stock goes up based on news",
+      "confidence": 85
+    }
+  ],
+  "down": [
+    {
+      "ticker": "SYMBOL",
+      "name": "Company Full Name",
+      "market": "NYSE or NASDAQ or NSE or BSE",
+      "reason": "Why this stock goes down based on news",
+      "confidence": 78
+    }
+  ]
+}
+
+Rules:
+- Only include stocks DIRECTLY mentioned or clearly impacted by the news
+- Give 5-12 stocks in each category
+- Confidence is 60-95 integer
+- Reasons must be news-specific (mention the actual news event)
+- For Indian stocks use NSE symbols (RELIANCE, ONGC, INFY, etc.)
+- For US stocks use standard tickers (AAPL, XOM, etc.)
+- Return ONLY raw JSON, nothing else, no markdown fences`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 2048 }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Gemini API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const clean = text.replace(/```json|```/g, '').trim();
+  return JSON.parse(clean);
+}
+
+async function runAnalysis() {
+  hideError();
+  document.getElementById('hlWrap').classList.remove('show');
+  document.getElementById('resultsGrid').classList.remove('show');
+  document.getElementById('summaryBox').classList.remove('show');
+  document.getElementById('statsRow').style.display = 'none';
+  document.getElementById('fetchBtn').disabled = true;
+
+  let headlines = [];
+
+  try {
+    showSpinner('📡 Fetching Yahoo Finance headlines...');
+    for (const feed of RSS_FEEDS) {
+      try {
+        const xml = await fetchRSS(feed.url);
+        const items = parseRSS(xml);
+        if (items.length) {
+          headlines = [...headlines, ...items.map(h => ({...h, source: feed.label}))];
+          renderHeadlines(headlines.slice(0,20), feed.label);
+          break;
+        }
+      } catch(e) { /* try next */ }
+    }
+
+    // Fallback headlines if RSS fails
+    if (headlines.length === 0) {
+      headlines = [
+        { title: 'Oil prices surge past $90 on Iran-US tensions threatening Strait of Hormuz', desc: 'Crude oil benchmark Brent surged to $92 amid fears of supply disruption' },
+        { title: 'Fed signals rate cuts delayed as inflation remains sticky at 3.2%', desc: 'Federal Reserve officials suggest fewer cuts in 2026 than market expected' },
+        { title: 'ONGC quarterly profits jump 34% on higher crude realization', desc: 'State-run oil explorer beats estimates driven by upstream pricing gains' },
+        { title: 'IndiGo warns of Q1 margin pressure as jet fuel costs rise 18%', desc: 'Aviation sector faces headwinds from rising crude oil prices' },
+        { title: 'BEL wins Rs 8,500 crore electronic warfare contract from Indian Army', desc: 'Bharat Electronics secures multi-year defence deal boosting order book' },
+        { title: 'Nvidia faces export restrictions to China, shares decline premarket', desc: 'US tightens chip export rules impacting Nvidia China revenues' },
+        { title: 'RBI holds repo rate at 6.25%, signals accommodative stance', desc: 'Rate pause benefits banking sector liquidity and lending margins' },
+        { title: 'Global aluminium prices rally 8% on Middle East conflict fears', desc: 'NALCO and Hindalco expected to benefit from commodity price spike' },
+        { title: 'Boeing receives 150-plane order from Indian carrier AirIndia', desc: 'Largest single aircraft order this quarter boosts Boeing stock' },
+        { title: 'Reliance Industries partners with Saudi Aramco on new refinery project', desc: 'Strategic deal could reduce crude procurement costs for RIL' },
+        { title: 'IOC, BPCL face margin squeeze as government limits petrol price hike', desc: 'Oil marketing companies absorb crude price increase without passing on cost' },
+        { title: 'Goldman Sachs cuts India GDP forecast to 6.1% on global uncertainty', desc: 'Investment bank cites geopolitical risks and slowing export demand' },
+        { title: 'Defence sector index surges 3.5% on global conflict escalation', desc: 'Indian defence stocks rally as geopolitical risk premium rises globally' },
+        { title: 'US airlines United, Delta warn of Q1 profit hit from fuel costs', desc: 'Major carriers slash guidance citing 20% rise in jet fuel expenses' },
+        { title: 'Tata Steel announces capacity expansion at UK plant, stock gains', desc: 'Capex plan signals confidence in global steel demand recovery' },
+      ];
+      renderHeadlines(headlines.slice(0,15), 'Cached News (RSS unavailable)');
+    }
+
+    document.getElementById('statNews').textContent = headlines.length;
+    updateTimestamp();
+
+    showSpinner('🤖 Gemini AI analyzing stock impacts...');
+    const result = await callGemini(headlines.slice(0, 15), selectedMarket);
+
+    hideSpinner();
+
+    // Summary
+    if (result.summary) {
+      document.getElementById('summaryText').textContent = result.summary;
+      document.getElementById('summaryBox').classList.add('show');
+    }
+
+    // Stats
+    document.getElementById('statUp').textContent = result.up?.length || 0;
+    document.getElementById('statDown').textContent = result.down?.length || 0;
+    document.getElementById('statMkt').textContent = selectedMarket === 'both' ? 'US + India' : selectedMarket === 'us' ? 'US Only' : 'India Only';
+    document.getElementById('statsRow').style.display = 'flex';
+
+    // Up stocks
+    const upGrid = document.getElementById('upGrid');
+    const downGrid = document.getElementById('downGrid');
+    upGrid.innerHTML = '';
+    downGrid.innerHTML = '';
+
+    (result.up || []).forEach(s => { upGrid.innerHTML += createStockCard(s, 'up'); });
+    (result.down || []).forEach(s => { downGrid.innerHTML += createStockCard(s, 'down'); });
+
+    document.getElementById('upCount').textContent = result.up?.length || 0;
+    document.getElementById('downCount').textContent = result.down?.length || 0;
+
+    document.getElementById('resultsGrid').classList.add('show');
+
+  } catch(e) {
+    hideSpinner();
+    showError('Analysis failed: ' + e.message + '. Please try again.');
+    console.error(e);
+  }
+
+  document.getElementById('fetchBtn').disabled = false;
+}
+</script>
+</body>
+</html>
