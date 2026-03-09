@@ -3,11 +3,11 @@ name: Deploy StockPulse to GitHub Pages
 on:
   push:
     branches:
-      - main          # Auto-deploy on every push to main
-  workflow_dispatch:  # Allow manual trigger from Actions tab
+      - main
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -19,46 +19,61 @@ jobs:
   deploy:
     name: Build & Deploy to GitHub Pages
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       # Step 1: Checkout repository code
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Step 2: Inject Gemini API key from GitHub Secret into index.html
-      # This replaces the %%GEMINI_API_KEY%% placeholder with the real key at build time
-      # Your key is NEVER stored in the code — only in GitHub Secrets (encrypted)
-      - name: Inject Gemini API Key
+      # Step 2: Enable GitHub Pages automatically via API
+      - name: Enable GitHub Pages
+        run: |
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/pages \
+            -d '{"build_type":"workflow"}' || true
+          echo "Pages enable request sent"
+
+      # Step 3: Build site — copy to _site folder and inject API key
+      # This ensures the SOURCE index.html always keeps the placeholder (safe for git)
+      # Only the BUILT _site/index.html gets the real key injected
+      - name: Build Site & Inject Gemini API Key
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          sed -i "s|%%GEMINI_API_KEY%%|${GEMINI_API_KEY}|g" index.html
-          echo "✅ API key injected into index.html"
+          mkdir -p _site
+          cp index.html _site/index.html
+          sed -i "s|%%GEMINI_API_KEY%%|${GEMINI_API_KEY}|g" _site/index.html
+          echo "API key injected into _site/index.html"
 
-      # Step 3: Verify injection worked (prints masked confirmation, not the key itself)
-      - name: Verify Injection
+      # Step 4: Verify the built file has the real key
+      - name: Verify API Key Injection
         run: |
-          if grep -q "%%GEMINI_API_KEY%%" index.html; then
-            echo "❌ ERROR: Placeholder still found — GEMINI_API_KEY secret may not be set!"
+          if grep -q "%%GEMINI_API_KEY%%" _site/index.html; then
+            echo "ERROR: Placeholder still present — GEMINI_API_KEY secret not set correctly"
+            echo "Go to: Settings > Secrets and variables > Actions > GEMINI_API_KEY"
             exit 1
           else
-            echo "✅ API key successfully injected"
+            echo "SUCCESS: API key injected correctly into built file"
           fi
 
-      # Step 4: Setup GitHub Pages
+      # Step 5: Setup GitHub Pages
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      # Step 5: Upload built site
+      # Step 6: Upload ONLY _site (the built folder with real key injected)
       - name: Upload Site Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: '_site'
 
-      # Step 6: Deploy to GitHub Pages
+      # Step 7: Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
