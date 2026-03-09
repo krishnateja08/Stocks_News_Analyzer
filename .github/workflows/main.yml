@@ -1,10 +1,12 @@
-name: Deploy StockPulse to GitHub Pages
+name: Deploy StockPulse Python to GitHub Pages
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1-5'   # Auto-run Mon-Fri at 9:30 AM IST (4:00 UTC) — market open
+  workflow_dispatch:          # Manual trigger anytime from Actions tab
 
 permissions:
   contents: write
@@ -16,14 +18,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Build & Deploy to GitHub Pages
+  analyze-and-deploy:
+    name: Fetch News → Analyze → Deploy Report
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout code
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # Step 2: Setup Python
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # Step 3: Install dependencies
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          echo "✅ Dependencies installed"
+
+      # Step 4: Run the analyzer — fetches live news + generates HTML report
+      - name: Run Stock Analyzer
+        run: |
+          python analyzer.py --market both --no-open --output index.html
+          echo "✅ Analysis complete, index.html generated"
+
+      # Step 5: Verify HTML was generated
+      - name: Verify Output
+        run: |
+          if [ ! -f "index.html" ]; then
+            echo "❌ index.html not generated — analyzer may have failed"
+            exit 1
+          fi
+          SIZE=$(wc -c < index.html)
+          echo "✅ index.html generated (${SIZE} bytes)"
+
+      # Step 6: Copy report to _site deploy folder
+      - name: Prepare Deploy Folder
+        run: |
+          mkdir -p _site
+          cp index.html _site/index.html
+          echo "✅ Files ready in _site/"
+
+      # Step 7: Enable GitHub Pages via API
       - name: Enable GitHub Pages
         run: |
           curl -s -X POST \
@@ -32,41 +72,19 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{ github.repository }}/pages \
             -d '{"build_type":"workflow"}' || true
+          echo "✅ Pages enable request sent"
 
-      # Generate config.js with the real API key — loaded by index.html at runtime
-      - name: Generate config.js from Secret
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          mkdir -p _site
-          cp index.html _site/index.html
-          # Write config.js with real key into _site
-          echo "window.GEMINI_API_KEY = '${GEMINI_API_KEY}';" > _site/config.js
-          echo "config.js generated successfully"
-          # Confirm it has content
-          cat _site/config.js | head -c 40
-          echo "..."
-
-      - name: Verify config.js
-        run: |
-          if [ ! -f "_site/config.js" ]; then
-            echo "ERROR: config.js not found!"
-            exit 1
-          fi
-          if grep -q "undefined\|''" _site/config.js; then
-            echo "ERROR: API key appears empty in config.js"
-            exit 1
-          fi
-          echo "SUCCESS: config.js looks good"
-
+      # Step 8: Setup GitHub Pages
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
+      # Step 9: Upload _site folder
       - name: Upload Site Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: '_site'
 
+      # Step 10: Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
