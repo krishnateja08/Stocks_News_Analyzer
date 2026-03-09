@@ -232,8 +232,26 @@ def analyze_stocks(headlines, market_filter="both"):
                 if ticker not in matched_down or matched_down[ticker]["confidence"] < confidence:
                     matched_down[ticker] = entry
 
+    # ── CONFLICT RESOLUTION ──────────────────────────────────────
+    # If a stock appears in BOTH up and down (e.g. HDFCBANK triggered
+    # by both rate-cut news AND geopolitical risk-off news), keep only
+    # the signal with the HIGHER confidence score. Ties go to bearish
+    # (more conservative). Log conflicts to terminal for transparency.
+    conflicts = set(matched_up.keys()) & set(matched_down.keys())
+    for ticker in conflicts:
+        up_conf   = matched_up[ticker]["confidence"]
+        down_conf = matched_down[ticker]["confidence"]
+        if up_conf > down_conf:
+            print(f"  ⚡ CONFLICT resolved → {ticker} kept as BULLISH "
+                  f"(up={up_conf}% > down={down_conf}%)")
+            del matched_down[ticker]
+        else:
+            print(f"  ⚡ CONFLICT resolved → {ticker} kept as BEARISH "
+                  f"(down={down_conf}% >= up={up_conf}%)")
+            del matched_up[ticker]
+
     # Sort by confidence descending
-    up_list = sorted(matched_up.values(), key=lambda x: x["confidence"], reverse=True)
+    up_list   = sorted(matched_up.values(),   key=lambda x: x["confidence"], reverse=True)
     down_list = sorted(matched_down.values(), key=lambda x: x["confidence"], reverse=True)
 
     return up_list, down_list
