@@ -1,0 +1,64 @@
+name: Deploy StockPulse to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main          # Auto-deploy on every push to main
+  workflow_dispatch:  # Allow manual trigger from Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # Step 1: Checkout repository code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Inject Gemini API key from GitHub Secret into index.html
+      # This replaces the %%GEMINI_API_KEY%% placeholder with the real key at build time
+      # Your key is NEVER stored in the code — only in GitHub Secrets (encrypted)
+      - name: Inject Gemini API Key
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          sed -i "s|%%GEMINI_API_KEY%%|${GEMINI_API_KEY}|g" index.html
+          echo "✅ API key injected into index.html"
+
+      # Step 3: Verify injection worked (prints masked confirmation, not the key itself)
+      - name: Verify Injection
+        run: |
+          if grep -q "%%GEMINI_API_KEY%%" index.html; then
+            echo "❌ ERROR: Placeholder still found — GEMINI_API_KEY secret may not be set!"
+            exit 1
+          else
+            echo "✅ API key successfully injected"
+          fi
+
+      # Step 4: Setup GitHub Pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      # Step 5: Upload built site
+      - name: Upload Site Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      # Step 6: Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
