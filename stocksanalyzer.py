@@ -249,14 +249,14 @@ def generate_html(headlines, up_list, down_list, market_filter):
 
     all_stocks = []
     for s in up_list:
-        all_stocks.append({{**s, "direction": "up",   "triggered_by": s.get("triggered_by", [])}})
+        all_stocks.append({**s, "direction": "up",   "triggered_by": s.get("triggered_by", [])})
     for s in down_list:
-        all_stocks.append({{**s, "direction": "down",  "triggered_by": s.get("triggered_by", [])}})
+        all_stocks.append({**s, "direction": "down",  "triggered_by": s.get("triggered_by", [])})
 
     stocks_json = json.dumps(all_stocks, ensure_ascii=False)
 
     headlines_json = json.dumps([
-        {{"title": escape(h["title"]), "source": escape(h["source"]), "link": escape(h["link"])}}
+        {"title": escape(h["title"]), "source": escape(h["source"]), "link": escape(h["link"])}
         for h in headlines[:25]
     ], ensure_ascii=False)
 
