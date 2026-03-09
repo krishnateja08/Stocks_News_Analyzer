@@ -39,7 +39,7 @@ jobs:
 
       - name: Run Stock Analyzer
         run: |
-          python analyzer.py --market both --no-open --output index.html
+          python stocksanalyzer.py --market both --no-open --output index.html
           echo "✅ Analysis complete"
 
       - name: Verify Output
